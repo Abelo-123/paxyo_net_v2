@@ -1,46 +1,17 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import WebApp from '@twa-dev/sdk';
 import './globals.css';
-
-// Define Telegram types
-interface TelegramUser {
-  id: number;
-  first_name: string;
-  last_name?: string;
-  username?: string;
-  language_code?: string;
-  is_premium?: boolean;
-}
-
-interface TelegramWebApp {
-  ready: () => void;
-  expand: () => void;
-  initDataUnsafe: {
-    user?: TelegramUser;
-    query_id?: string;
-    auth_date?: number;
-    hash?: string;
-  };
-  initData: string;
-}
-
-declare global {
-  interface Window {
-    Telegram?: {
-      WebApp: TelegramWebApp;
-    };
-  }
-}
 
 // ============================================
 // MOCK DATA FOR TESTING WITHOUT TELEGRAM
 // Set USE_MOCK_DATA to true for local testing
 // Set to false for production
 // ============================================
-const USE_MOCK_DATA = true;
+const USE_MOCK_DATA = false;
 
-const MOCK_TELEGRAM_USER: TelegramUser = {
+const MOCK_TELEGRAM_USER = {
   id: 5928771903,
   first_name: 'Abel',
   last_name: 'Abate',
@@ -54,81 +25,62 @@ const MOCK_INIT_DATA = 'user=%7B%22id%22%3A5928771903%2C%22first_name%22%3A%22Ab
 
 export default function Home() {
   const [loading, setLoading] = useState(true);
-  const [telegramUser, setTelegramUser] = useState<TelegramUser | null>(null);
+  const [telegramUser, setTelegramUser] = useState<any | null>(null);
   const [iframeKey, setIframeKey] = useState(0);
   const [initData, setInitData] = useState<string>('');
   const [isUsingMockData, setIsUsingMockData] = useState(false);
 
   useEffect(() => {
-    // If USE_MOCK_DATA is enabled, use mock data immediately
+    // Check if running in Telegram WebApp
+    // WebApp.initData is empty string if not in Telegram (or if mocked env not set)
+    // But we should check if window.Telegram.WebApp is available basically via the SDK
+
+    // The SDK initialized automatically if the script is present.
+    // Call ready/expand
+    if (typeof window !== 'undefined') {
+      // Since the script is loaded beforeInteractive, WebApp global should be ready 
+      // but the SDK wrapper checks it too.
+
+      try {
+        WebApp.ready();
+        WebApp.expand();
+        // Optional: Set header color
+        WebApp.setHeaderColor('#000000'); // or any color matches your app
+      } catch (e) {
+        console.error("WebApp error", e);
+      }
+    }
+
     if (USE_MOCK_DATA) {
       console.log('🧪 Using MOCK Telegram data for testing');
       setTelegramUser(MOCK_TELEGRAM_USER);
       setInitData(MOCK_INIT_DATA);
       setIsUsingMockData(true);
       setLoading(false);
-      setIframeKey(prev => prev + 1);
       return;
     }
 
-    // Load Telegram Web App SDK
-    const script = document.createElement('script');
-    script.src = 'https://telegram.org/js/telegram-web-app.js?2';
-    script.async = true;
-    document.body.appendChild(script);
+    const user = WebApp.initDataUnsafe?.user;
+    const rawInitData = WebApp.initData;
 
-    script.onload = () => {
-      const Telegram = window.Telegram;
+    if (user) {
+      setTelegramUser(user);
+      setInitData(rawInitData);
+      console.log('📱 Telegram User:', user);
+      console.log('📱 Init Data:', rawInitData);
+    } else {
+      // Not in Telegram or failed to init
+      console.log('⚠️ No Telegram user detected or not inside Telegram');
+      // Fallback or just stay empty? User said "whole app as telegram miniapp"
+      // If we are not in telegram, maybe we still want to show something or use mock?
+      // Let's use mock if explicit fallback is desired, otherwise just show app without user data
+      // For debugging purposes, if it's completely missing, maybe mock data is useful for dev.
+      // But for prod, we might want to prompt user.
+      // For now, I will NOT set mock data automatically if USE_MOCK_DATA is false.
+    }
 
-      if (Telegram && Telegram.WebApp) {
-        // Initialize Telegram Web App
-        Telegram.WebApp.ready();
-        Telegram.WebApp.expand();
+    setLoading(false);
 
-        // Get user data from Telegram
-        const { user } = Telegram.WebApp.initDataUnsafe;
-        const rawInitData = Telegram.WebApp.initData;
-
-        if (user) {
-          setTelegramUser(user);
-          setInitData(rawInitData);
-          console.log('📱 Telegram User:', user);
-          console.log('📱 Init Data:', rawInitData);
-        } else {
-          // Not in Telegram and no user data - use mock as fallback
-          console.log('⚠️ No Telegram user detected, falling back to mock data');
-          setTelegramUser(MOCK_TELEGRAM_USER);
-          setInitData(MOCK_INIT_DATA);
-          setIsUsingMockData(true);
-        }
-
-        setLoading(false);
-        setIframeKey(prev => prev + 1);
-      } else {
-        // Telegram SDK didn't load properly - use mock as fallback
-        console.log('⚠️ Telegram SDK not available, falling back to mock data');
-        setTelegramUser(MOCK_TELEGRAM_USER);
-        setInitData(MOCK_INIT_DATA);
-        setIsUsingMockData(true);
-        setLoading(false);
-        setIframeKey(prev => prev + 1);
-      }
-    };
-
-    script.onerror = () => {
-      console.error('❌ Failed to load Telegram Web App SDK, using mock data');
-      setTelegramUser(MOCK_TELEGRAM_USER);
-      setInitData(MOCK_INIT_DATA);
-      setIsUsingMockData(true);
-      setLoading(false);
-      setIframeKey(prev => prev + 1);
-    };
-
-    return () => {
-      if (document.body.contains(script)) {
-        document.body.removeChild(script);
-      }
-    };
   }, []);
 
   // Generate iframe src with Telegram user data as query params
