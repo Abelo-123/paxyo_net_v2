@@ -1,7 +1,7 @@
 'use client';
 
+
 import { useEffect, useState } from 'react';
-import WebApp from '@twa-dev/sdk';
 import './globals.css';
 
 // ============================================
@@ -37,49 +37,52 @@ export default function Home() {
 
     // The SDK initialized automatically if the script is present.
     // Call ready/expand
-    if (typeof window !== 'undefined') {
-      // Since the script is loaded beforeInteractive, WebApp global should be ready 
-      // but the SDK wrapper checks it too.
+    const initWebApp = async () => {
+      if (typeof window !== 'undefined') {
+        try {
+          const WebApp = (await import('@twa-dev/sdk')).default;
 
-      try {
-        WebApp.ready();
-        WebApp.expand();
-        // Optional: Set header color
-        WebApp.setHeaderColor('#000000'); // or any color matches your app
-      } catch (e) {
-        console.error("WebApp error", e);
+          WebApp.ready();
+          WebApp.expand();
+          // Optional: Set header color
+          try {
+            WebApp.setHeaderColor('#000000');
+          } catch (e) {
+            console.log("Could not set header color", e);
+          }
+
+          if (USE_MOCK_DATA) {
+            console.log('🧪 Using MOCK Telegram data for testing');
+            setTelegramUser(MOCK_TELEGRAM_USER);
+            setInitData(MOCK_INIT_DATA);
+            setIsUsingMockData(true);
+            setLoading(false);
+            return;
+          }
+
+          const user = WebApp.initDataUnsafe?.user;
+          const rawInitData = WebApp.initData;
+
+          if (user) {
+            setTelegramUser(user);
+            setInitData(rawInitData);
+            console.log('📱 Telegram User:', user);
+            console.log('📱 Init Data:', rawInitData);
+          } else {
+            // Not in Telegram or failed to init
+            console.log('⚠️ No Telegram user detected or not inside Telegram');
+          }
+
+          setLoading(false);
+
+        } catch (e) {
+          console.error("WebApp usage error", e);
+          setLoading(false);
+        }
       }
-    }
+    };
 
-    if (USE_MOCK_DATA) {
-      console.log('🧪 Using MOCK Telegram data for testing');
-      setTelegramUser(MOCK_TELEGRAM_USER);
-      setInitData(MOCK_INIT_DATA);
-      setIsUsingMockData(true);
-      setLoading(false);
-      return;
-    }
-
-    const user = WebApp.initDataUnsafe?.user;
-    const rawInitData = WebApp.initData;
-
-    if (user) {
-      setTelegramUser(user);
-      setInitData(rawInitData);
-      console.log('📱 Telegram User:', user);
-      console.log('📱 Init Data:', rawInitData);
-    } else {
-      // Not in Telegram or failed to init
-      console.log('⚠️ No Telegram user detected or not inside Telegram');
-      // Fallback or just stay empty? User said "whole app as telegram miniapp"
-      // If we are not in telegram, maybe we still want to show something or use mock?
-      // Let's use mock if explicit fallback is desired, otherwise just show app without user data
-      // For debugging purposes, if it's completely missing, maybe mock data is useful for dev.
-      // But for prod, we might want to prompt user.
-      // For now, I will NOT set mock data automatically if USE_MOCK_DATA is false.
-    }
-
-    setLoading(false);
+    initWebApp();
 
   }, []);
 
